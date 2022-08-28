@@ -1,11 +1,13 @@
 # Implemented from the pseudocode at https://en.wikipedia.org/wiki/SHA-2
 
+from typing import Generator
+
 
 __all__ = ["sha224", "sha256", "sha512"]
 
 
-def _rr(x: int, n: int, *, bit_size: int = 32) -> int:
-    return ((x >> n) | (x << (bit_size - n))) & int(2**bit_size - 1)
+def _rr(x: int, n: int, *, bit_size: int = 32, mask: int = 0xFFFFFFFF) -> int:
+    return ((x >> n) | (x << (bit_size - n))) & mask
 
 
 def __sha224_constants() -> tuple[int, int, int, int, int, int, int, int, list[int]]:
@@ -97,13 +99,9 @@ def __isolate(value: int, nbits: int, *, start_bit: int = 0) -> int:
     return (value & (((1 << nbits) - 1) << start_bit)) >> (start_bit)
 
 
-def __chunk(padded: int, *, chunk_size: int = 512) -> list[int]:
-    chunks: list[int] = []
-
+def __chunk(padded: int, *, chunk_size: int = 512) -> Generator[int, None, None]:
     for i in range(((padded.bit_length() + 1) // chunk_size) - 1, -1, -1):
-        chunks.append(__isolate(padded, chunk_size, start_bit=(i * chunk_size)))
-
-    return chunks
+        yield __isolate(padded, chunk_size, start_bit=(i * chunk_size))
 
 
 def sha224(message: bytes) -> str:
@@ -202,17 +200,17 @@ def sha512(message: bytes) -> str:
             w[15 - i] = __isolate(chunk, 64, start_bit=(i * 64))
 
         for i in range(16, 80):
-            s0 = _rr(w[i - 15], 1, bit_size=64) ^ _rr(w[i - 15], 8, bit_size=64) ^ (w[i - 15] >> 7)
-            s1 = _rr(w[i - 2], 19, bit_size=64) ^ _rr(w[i - 2], 61, bit_size=64) ^ (w[i - 2] >> 6)
+            s0 = _rr(w[i - 15], 1, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(w[i - 15], 8, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ (w[i - 15] >> 7)
+            s1 = _rr(w[i - 2], 19, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(w[i - 2], 61, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ (w[i - 2] >> 6)
             w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFFFFFFFFFF
 
         a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
 
         for i in range(80):
-            S1 = _rr(e, 14, bit_size=64) ^ _rr(e, 18, bit_size=64) ^ _rr(e, 41, bit_size=64)
+            S1 = _rr(e, 14, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(e, 18, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(e, 41, bit_size=64, mask=0xFFFFFFFFFFFFFFFF)  # noqa
             ch = (e & f) ^ ((~e) & g)
             t1 = (h + S1 + ch + k[i] + w[i]) & 0xFFFFFFFFFFFFFFFF
-            S0 = _rr(a, 28, bit_size=64) ^ _rr(a, 34, bit_size=64) ^ _rr(a, 39, bit_size=64)
+            S0 = _rr(a, 28, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(a, 34, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(a, 39, bit_size=64, mask=0xFFFFFFFFFFFFFFFF)  # noqa
             ma = (a & b) ^ (a & c) ^ (b & c)
             t2 = (S0 + ma) & 0xFFFFFFFFFFFFFFFF
 
