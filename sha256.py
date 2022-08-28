@@ -1,15 +1,38 @@
 # Implemented from the pseudocode at https://en.wikipedia.org/wiki/SHA-2
 
 
-__all__ = ["sha256"]
+__all__ = ["sha224", "sha256"]
 
 
 def _rr(x: int, n: int) -> int:
-    " Right rotate "
     return ((x >> n) | (x << (32 - n))) & 0xFFFFFFFF
 
 
-def sha256(message: bytes) -> str:
+def __sha224_constants() -> tuple[int, int, int, int, int, int, int, int, list[int]]:
+    h0 = 0xc1059ed8
+    h1 = 0x367cd507
+    h2 = 0x3070dd17
+    h3 = 0xf70e5939
+    h4 = 0xffc00b31
+    h5 = 0x68581511
+    h6 = 0x64f98fa7
+    h7 = 0xbefa4fa4
+
+    k = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    ]
+
+    return (h0, h1, h2, h3, h4, h5, h6, h7, k)
+
+
+def __sha256_constants() -> tuple[int, int, int, int, int, int, int, int, list[int]]:
     h0 = 0x6a09e667
     h1 = 0xbb67ae85
     h2 = 0x3c6ef372
@@ -30,29 +53,78 @@ def sha256(message: bytes) -> str:
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     ]
 
-    x = int.from_bytes(message, byteorder="big")
+    return (h0, h1, h2, h3, h4, h5, h6, h7, k)
+
+
+def __pad(message: bytes) -> int:
     L = len(message) * 8
+    return ((int.from_bytes(message, byteorder="big") << 1) | 1) << (576 - ((65 + L) % 512)) | L
 
-    x = (x << 1) | 0b1
-    K = 0
 
-    while ((K := K + 1) + 1 + L + 64) % 512 != 0:
-        continue
+def __isolate(value: int, nbits: int, *, start_bit: int = 0) -> int:
+    return (value & (((1 << nbits) - 1) << start_bit)) >> (start_bit)
 
-    x <<= K
-    x <<= 64
-    x |= L
 
-    chunks = (x.bit_length() + 1) // 512
+def __chunk(padded: int, *, chunk_size: int = 512) -> list[int]:
+    chunks: list[int] = []
 
-    for i in range(chunks - 1, -1, -1):
-        mask = ((1 << 512) - 1) << (i * 512)
-        chunk = (x & mask) >> (i * 512)
+    for i in range(((padded.bit_length() + 1) // chunk_size) - 1, -1, -1):
+        chunks.append(__isolate(padded, chunk_size, start_bit=(i * chunk_size)))
+
+    return chunks
+
+
+def sha224(message: bytes) -> str:
+    h0, h1, h2, h3, h4, h5, h6, h7, k = __sha224_constants()
+
+    for chunk in __chunk(__pad(message), chunk_size=512):
         w = [0] * 64
 
         for i in range(15, -1, -1):
-            mask = ((1 << 32) - 1) << (i * 32)
-            w[15 - i] = (chunk & mask) >> (i * 32)
+            w[15 - i] = __isolate(chunk, 32, start_bit=(i * 32))
+
+        for i in range(16, 64):
+            s0 = _rr(w[i - 15], 7) ^ _rr(w[i - 15], 18) ^ (w[i - 15] >> 3)
+            s1 = _rr(w[i - 2], 17) ^ _rr(w[i - 2], 19) ^ (w[i - 2] >> 10)
+            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF
+
+        a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
+
+        for i in range(64):
+            S1 = _rr(e, 6) ^ _rr(e, 11) ^ _rr(e, 25)
+            ch = (e & f) ^ ((~e) & g)
+            t1 = (h + S1 + ch + k[i] + w[i]) & 0xFFFFFFFF
+            S0 = _rr(a, 2) ^ _rr(a, 13) ^ _rr(a, 22)
+            ma = (a & b) ^ (a & c) ^ (b & c)
+            t2 = (S0 + ma) & 0xFFFFFFFF
+
+            h, g, f, e, d, c, b, a = g, f, e, (d + t1) & 0xFFFFFFFF, c, b, a, (t1 + t2) & 0xFFFFFFFF
+
+        h0 = (h0 + a) & 0xFFFFFFFF
+        h1 = (h1 + b) & 0xFFFFFFFF
+        h2 = (h2 + c) & 0xFFFFFFFF
+        h3 = (h3 + d) & 0xFFFFFFFF
+        h4 = (h4 + e) & 0xFFFFFFFF
+        h5 = (h5 + f) & 0xFFFFFFFF
+        h6 = (h6 + g) & 0xFFFFFFFF
+        h7 = (h7 + h) & 0xFFFFFFFF
+
+    digest = 0
+
+    for i, v in enumerate([h0, h1, h2, h3, h4, h5, h6]):
+        digest += v << ((6 - i) * 32)
+
+    return hex(digest)[2:]
+
+
+def sha256(message: bytes) -> str:
+    h0, h1, h2, h3, h4, h5, h6, h7, k = __sha256_constants()
+
+    for chunk in __chunk(__pad(message), chunk_size=512):
+        w = [0] * 64
+
+        for i in range(15, -1, -1):
+            w[15 - i] = __isolate(chunk, 32, start_bit=(i * 32))
 
         for i in range(16, 64):
             s0 = _rr(w[i - 15], 7) ^ _rr(w[i - 15], 18) ^ (w[i - 15] >> 3)
