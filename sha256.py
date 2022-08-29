@@ -90,9 +90,19 @@ def __sha512_constants() -> tuple[int, int, int, int, int, int, int, int, list[i
     return (h0, h1, h2, h3, h4, h5, h6, h7, k)
 
 
+def __int_from_bytes(message: bytes) -> int:
+    L = len(message)
+    x = 0
+
+    for (i, c) in enumerate(message):
+        x |= (c << ((L - i - 1) * 8))
+
+    return x
+
+
 def __pad(message: bytes, *, pad_size: int = 512) -> int:
     L = len(message) * 8
-    return ((int.from_bytes(message, byteorder="big") << 1) | 1) << ((pad_size + (pad_size // 8)) - ((1 + (pad_size // 8) + L) % pad_size)) | L
+    return ((__int_from_bytes(message) << 1) | 1) << ((pad_size + (pad_size // 8)) - ((1 + (pad_size // 8) + L) % pad_size)) | L
 
 
 def __isolate(value: int, nbits: int, *, start_bit: int = 0) -> int:
