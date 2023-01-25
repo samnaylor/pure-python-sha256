@@ -6,11 +6,11 @@ from typing import Generator
 __all__ = ["sha224", "sha256", "sha512"]
 
 
-def _rr(x: int, n: int, *, bit_size: int = 32, mask: int = 0xFFFFFFFF) -> int:
+def _rr(x: int, n: int, bit_size: int, mask: int) -> int:
     return ((x >> n) | (x << (bit_size - n))) & mask
 
 
-def __sha224_constants() -> tuple[int, int, int, int, int, int, int, int, list[int]]:
+def __sha224_constants() -> tuple[int, int, int, int, int, int, int, int, list[int], int, int]:
     h0 = 0xc1059ed8
     h1 = 0x367cd507
     h2 = 0x3070dd17
@@ -31,10 +31,10 @@ def __sha224_constants() -> tuple[int, int, int, int, int, int, int, int, list[i
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     ]
 
-    return (h0, h1, h2, h3, h4, h5, h6, h7, k)
+    return (h0, h1, h2, h3, h4, h5, h6, h7, k, 32, 0xFFFFFFFF)
 
 
-def __sha256_constants() -> tuple[int, int, int, int, int, int, int, int, list[int]]:
+def __sha256_constants() -> tuple[int, int, int, int, int, int, int, int, list[int], int, int]:
     h0 = 0x6a09e667
     h1 = 0xbb67ae85
     h2 = 0x3c6ef372
@@ -55,10 +55,10 @@ def __sha256_constants() -> tuple[int, int, int, int, int, int, int, int, list[i
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     ]
 
-    return (h0, h1, h2, h3, h4, h5, h6, h7, k)
+    return (h0, h1, h2, h3, h4, h5, h6, h7, k, 32, 0xFFFFFFFF)
 
 
-def __sha512_constants() -> tuple[int, int, int, int, int, int, int, int, list[int]]:
+def __sha512_constants() -> tuple[int, int, int, int, int, int, int, int, list[int], int, int]:
     h0 = 0x6a09e667f3bcc908
     h1 = 0xbb67ae8584caa73b
     h2 = 0x3c6ef372fe94f82b
@@ -87,52 +87,52 @@ def __sha512_constants() -> tuple[int, int, int, int, int, int, int, int, list[i
         0x431d67c49c100d4c, 0x4cc5d4becb3e42b6, 0x597f299cfc657e2a, 0x5fcb6fab3ad6faec, 0x6c44198c4a475817
     ]
 
-    return (h0, h1, h2, h3, h4, h5, h6, h7, k)
+    return (h0, h1, h2, h3, h4, h5, h6, h7, k, 64, 0xFFFFFFFFFFFFFFFF)
 
 
 def __int_from_bytes(message: bytes) -> int:
     return int.from_bytes(message, "big")
 
 
-def __pad(message: bytes, *, pad_size: int = 512) -> int:
+def __pad(message: bytes, pad_size: int) -> int:
     L = len(message) << 3
     P = pad_size // 8
     return ((__int_from_bytes(message) << 1) | 1) << ((pad_size + P) - ((1 + P + L) % pad_size)) | L
 
 
-def __isolate(value: int, nbits: int, *, start_bit: int = 0) -> int:
+def __isolate(value: int, nbits: int, start_bit: int) -> int:
     return (value & (((1 << nbits) - 1) << start_bit)) >> (start_bit)
 
 
-def __chunk(padded: int, *, chunk_size: int = 512) -> Generator[int, None, None]:
+def __chunk(padded: int, chunk_size: int) -> Generator[int, None, None]:
     for i in range(((padded.bit_length() + 2) // chunk_size) - 1, -1, -1):
-        yield __isolate(padded, chunk_size, start_bit=(i * chunk_size))
+        yield __isolate(padded, chunk_size, (i * chunk_size))
 
 
 def sha224(message: bytes | str) -> str:
     if isinstance(message, str):
         message = message.encode("utf-8")
 
-    h0, h1, h2, h3, h4, h5, h6, h7, k = __sha224_constants()
+    h0, h1, h2, h3, h4, h5, h6, h7, k, bit_size, mask = __sha224_constants()
 
-    for chunk in __chunk(__pad(message), chunk_size=512):
+    for chunk in __chunk(__pad(message, 512), 512):
         w = [0] * 64
 
         for i in range(15, -1, -1):
-            w[15 - i] = __isolate(chunk, 32, start_bit=(i * 32))
+            w[15 - i] = __isolate(chunk, 32, (i * 32))
 
         for i in range(16, 64):
-            s0 = _rr(w[i - 15], 7) ^ _rr(w[i - 15], 18) ^ (w[i - 15] >> 3)
-            s1 = _rr(w[i - 2], 17) ^ _rr(w[i - 2], 19) ^ (w[i - 2] >> 10)
+            s0 = _rr(w[i - 15], 7, bit_size, mask) ^ _rr(w[i - 15], 18, bit_size, mask) ^ (w[i - 15] >> 3)
+            s1 = _rr(w[i - 2], 17, bit_size, mask) ^ _rr(w[i - 2], 19, bit_size, mask) ^ (w[i - 2] >> 10)
             w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF
 
         a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
 
         for i in range(64):
-            S1 = _rr(e, 6) ^ _rr(e, 11) ^ _rr(e, 25)
+            S1 = _rr(e, 6, bit_size, mask) ^ _rr(e, 11, bit_size, mask) ^ _rr(e, 25, bit_size, mask)
             ch = (e & f) ^ ((~e) & g)
             t1 = (h + S1 + ch + k[i] + w[i]) & 0xFFFFFFFF
-            S0 = _rr(a, 2) ^ _rr(a, 13) ^ _rr(a, 22)
+            S0 = _rr(a, 2, bit_size, mask) ^ _rr(a, 13, bit_size, mask) ^ _rr(a, 22, bit_size, mask)
             ma = (a & b) ^ (a & c) ^ (b & c)
             t2 = (S0 + ma) & 0xFFFFFFFF
 
@@ -159,26 +159,26 @@ def sha256(message: bytes | str) -> str:
     if isinstance(message, str):
         message = message.encode("utf-8")
 
-    h0, h1, h2, h3, h4, h5, h6, h7, k = __sha256_constants()
+    h0, h1, h2, h3, h4, h5, h6, h7, k, bit_size, mask = __sha256_constants()
 
-    for chunk in __chunk(__pad(message), chunk_size=512):
+    for chunk in __chunk(__pad(message, 512), 512):
         w = [0] * 64
 
         for i in range(15, -1, -1):
-            w[15 - i] = __isolate(chunk, 32, start_bit=(i * 32))
+            w[15 - i] = __isolate(chunk, 32, (i * 32))
 
         for i in range(16, 64):
-            s0 = _rr(w[i - 15], 7) ^ _rr(w[i - 15], 18) ^ (w[i - 15] >> 3)
-            s1 = _rr(w[i - 2], 17) ^ _rr(w[i - 2], 19) ^ (w[i - 2] >> 10)
+            s0 = _rr(w[i - 15], 7, bit_size, mask) ^ _rr(w[i - 15], 18, bit_size, mask) ^ (w[i - 15] >> 3)
+            s1 = _rr(w[i - 2], 17, bit_size, mask) ^ _rr(w[i - 2], 19, bit_size, mask) ^ (w[i - 2] >> 10)
             w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF
 
         a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
 
         for i in range(64):
-            S1 = _rr(e, 6) ^ _rr(e, 11) ^ _rr(e, 25)
+            S1 = _rr(e, 6, bit_size, mask) ^ _rr(e, 11, bit_size, mask) ^ _rr(e, 25, bit_size, mask)
             ch = (e & f) ^ ((~e) & g)
             t1 = (h + S1 + ch + k[i] + w[i]) & 0xFFFFFFFF
-            S0 = _rr(a, 2) ^ _rr(a, 13) ^ _rr(a, 22)
+            S0 = _rr(a, 2, bit_size, mask) ^ _rr(a, 13, bit_size, mask) ^ _rr(a, 22, bit_size, mask)
             ma = (a & b) ^ (a & c) ^ (b & c)
             t2 = (S0 + ma) & 0xFFFFFFFF
 
@@ -205,26 +205,26 @@ def sha512(message: bytes | str) -> str:
     if isinstance(message, str):
         message = message.encode("utf-8")
 
-    h0, h1, h2, h3, h4, h5, h6, h7, k = __sha512_constants()
+    h0, h1, h2, h3, h4, h5, h6, h7, k, bit_size, mask = __sha512_constants()
 
-    for chunk in __chunk(__pad(message, pad_size=1024), chunk_size=1024):
+    for chunk in __chunk(__pad(message, 1024), 1024):
         w = [0] * 80
 
         for i in range(15, -1, -1):
-            w[15 - i] = __isolate(chunk, 64, start_bit=(i * 64))
+            w[15 - i] = __isolate(chunk, 64, (i * 64))
 
         for i in range(16, 80):
-            s0 = _rr(w[i - 15], 1, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(w[i - 15], 8, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ (w[i - 15] >> 7)
-            s1 = _rr(w[i - 2], 19, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(w[i - 2], 61, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ (w[i - 2] >> 6)
+            s0 = _rr(w[i - 15], 1, bit_size, mask) ^ _rr(w[i - 15], 8, bit_size, mask) ^ (w[i - 15] >> 7)
+            s1 = _rr(w[i - 2], 19, bit_size, mask) ^ _rr(w[i - 2], 61, bit_size, mask) ^ (w[i - 2] >> 6)
             w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFFFFFFFFFF
 
         a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
 
         for i in range(80):
-            S1 = _rr(e, 14, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(e, 18, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(e, 41, bit_size=64, mask=0xFFFFFFFFFFFFFFFF)  # noqa
+            S1 = _rr(e, 14, bit_size, mask) ^ _rr(e, 18, bit_size, mask) ^ _rr(e, 41, bit_size, mask)  # noqa
             ch = (e & f) ^ ((~e) & g)
             t1 = (h + S1 + ch + k[i] + w[i]) & 0xFFFFFFFFFFFFFFFF
-            S0 = _rr(a, 28, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(a, 34, bit_size=64, mask=0xFFFFFFFFFFFFFFFF) ^ _rr(a, 39, bit_size=64, mask=0xFFFFFFFFFFFFFFFF)  # noqa
+            S0 = _rr(a, 28, bit_size, mask) ^ _rr(a, 34, bit_size, mask) ^ _rr(a, 39, bit_size, mask)  # noqa
             ma = (a & b) ^ (a & c) ^ (b & c)
             t2 = (S0 + ma) & 0xFFFFFFFFFFFFFFFF
 
