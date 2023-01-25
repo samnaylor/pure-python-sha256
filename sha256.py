@@ -109,7 +109,10 @@ def __chunk(padded: int, *, chunk_size: int = 512) -> Generator[int, None, None]
         yield __isolate(padded, chunk_size, start_bit=(i * chunk_size))
 
 
-def sha224(message: bytes) -> str:
+def sha224(message: bytes | str) -> str:
+    if isinstance(message, str):
+        message = message.encode("utf-8")
+
     h0, h1, h2, h3, h4, h5, h6, h7, k = __sha224_constants()
 
     for chunk in __chunk(__pad(message), chunk_size=512):
@@ -152,7 +155,10 @@ def sha224(message: bytes) -> str:
     return f"{digest:x}"
 
 
-def sha256(message: bytes) -> str:
+def sha256(message: bytes | str) -> str:
+    if isinstance(message, str):
+        message = message.encode("utf-8")
+
     h0, h1, h2, h3, h4, h5, h6, h7, k = __sha256_constants()
 
     for chunk in __chunk(__pad(message), chunk_size=512):
@@ -195,7 +201,10 @@ def sha256(message: bytes) -> str:
     return f"{digest:x}"
 
 
-def sha512(message: bytes) -> str:
+def sha512(message: bytes | str) -> str:
+    if isinstance(message, str):
+        message = message.encode("utf-8")
+
     h0, h1, h2, h3, h4, h5, h6, h7, k = __sha512_constants()
 
     for chunk in __chunk(__pad(message, pad_size=1024), chunk_size=1024):
