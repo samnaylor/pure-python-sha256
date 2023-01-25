@@ -91,17 +91,11 @@ def __sha512_constants() -> tuple[int, int, int, int, int, int, int, int, list[i
 
 
 def __int_from_bytes(message: bytes) -> int:
-    L = len(message)
-    x = 0
-
-    for (i, c) in enumerate(message):
-        x |= (c << ((L - i - 1) * 8))
-
-    return x
+    return int.from_bytes(message, "big")
 
 
 def __pad(message: bytes, *, pad_size: int = 512) -> int:
-    L = len(message) * 8
+    L = len(message) << 3
     return ((__int_from_bytes(message) << 1) | 1) << ((pad_size + (pad_size // 8)) - ((1 + (pad_size // 8) + L) % pad_size)) | L
 
 
@@ -110,7 +104,7 @@ def __isolate(value: int, nbits: int, *, start_bit: int = 0) -> int:
 
 
 def __chunk(padded: int, *, chunk_size: int = 512) -> Generator[int, None, None]:
-    for i in range(((padded.bit_length() + 1) // chunk_size) - 1, -1, -1):
+    for i in range(((padded.bit_length() + 2) // chunk_size) - 1, -1, -1):
         yield __isolate(padded, chunk_size, start_bit=(i * chunk_size))
 
 
@@ -152,21 +146,24 @@ def sha224(message: bytes) -> str:
     digest = 0
 
     for i, v in enumerate([h0, h1, h2, h3, h4, h5, h6]):
-        digest += v << ((6 - i) * 32)
+        digest = digest + (v << ((6 - i) * 32))
 
-    return hex(digest)[2:]
+    return f"{digest:x}"
 
 
 def sha256(message: bytes) -> str:
     h0, h1, h2, h3, h4, h5, h6, h7, k = __sha256_constants()
 
     for chunk in __chunk(__pad(message), chunk_size=512):
+        print(chunk)
         w = [0] * 64
 
         for i in range(15, -1, -1):
+            print(i)
             w[15 - i] = __isolate(chunk, 32, start_bit=(i * 32))
 
         for i in range(16, 64):
+            print(i)
             s0 = _rr(w[i - 15], 7) ^ _rr(w[i - 15], 18) ^ (w[i - 15] >> 3)
             s1 = _rr(w[i - 2], 17) ^ _rr(w[i - 2], 19) ^ (w[i - 2] >> 10)
             w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF
@@ -174,6 +171,7 @@ def sha256(message: bytes) -> str:
         a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
 
         for i in range(64):
+            print(i)
             S1 = _rr(e, 6) ^ _rr(e, 11) ^ _rr(e, 25)
             ch = (e & f) ^ ((~e) & g)
             t1 = (h + S1 + ch + k[i] + w[i]) & 0xFFFFFFFF
@@ -195,9 +193,9 @@ def sha256(message: bytes) -> str:
     digest = 0
 
     for i, v in enumerate([h0, h1, h2, h3, h4, h5, h6, h7]):
-        digest += v << ((7 - i) * 32)
+        digest = digest + (v << ((7 - i) * 32))
 
-    return hex(digest)[2:]
+    return f"{digest:x}"
 
 
 def sha512(message: bytes) -> str:
@@ -238,6 +236,6 @@ def sha512(message: bytes) -> str:
     digest = 0
 
     for i, v in enumerate([h0, h1, h2, h3, h4, h5, h6, h7]):
-        digest += v << ((7 - i) * 64)
+        digest = digest + (v << ((7 - i) * 64))
 
-    return hex(digest)[2:]
+    return f"{digest:x}"
